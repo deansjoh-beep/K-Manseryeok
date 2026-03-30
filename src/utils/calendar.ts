@@ -3,8 +3,6 @@ import { Solar, EightChar } from 'lunar-javascript';
 import { HEAVENLY_STEMS, EARTHLY_BRANCHES, Ganji, Saju } from '../constants';
 
 // 사주 명리학 기준인 23시 자시를 기준으로 날짜가 바뀌도록 설정합니다.
-EightChar.setDayGanjiType(1);
-
 export function getSolarTerm(year: number, month: number, day: number): string | null {
   const solar = Solar.fromYmd(year, month, day);
   const term = solar.getLunar().getJieQi();
@@ -27,6 +25,11 @@ export function getDayGanji(year: number, month: number, day: number): Ganji {
   const solar = Solar.fromYmd(year, month, day);
   const lunar = solar.getLunar();
   const eightChar = lunar.getEightChar();
+  // @ts-ignore
+  if (typeof eightChar.setDayGanjiType === 'function') {
+    // @ts-ignore
+    eightChar.setDayGanjiType(1);
+  }
   return parseGanji(eightChar.getDay());
 }
 
@@ -34,6 +37,11 @@ export function getFullSaju(year: number, month: number, day: number, hour: numb
   const solar = Solar.fromYmdHms(year, month, day, hour, 0, 0);
   const lunar = solar.getLunar();
   const eightChar = lunar.getEightChar();
+  // @ts-ignore
+  if (typeof eightChar.setDayGanjiType === 'function') {
+    // @ts-ignore
+    eightChar.setDayGanjiType(1);
+  }
   
   return {
     year: parseGanji(eightChar.getYear()),
@@ -49,14 +57,25 @@ export function getYearGanji(date: Date): Ganji {
   const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, 15);
   const lunar = solar.getLunar();
   const eightChar = lunar.getEightChar();
+  // @ts-ignore
+  if (typeof eightChar.setDayGanjiType === 'function') {
+    // @ts-ignore
+    eightChar.setDayGanjiType(1);
+  }
   return parseGanji(eightChar.getYear());
 }
 
 export function getMonthGanji(year: number, month: number): Ganji {
-  // Use the 1st of the month to get the starting month Ganji
-  const solar = Solar.fromYmd(year, month, 1);
+  // 해당 월의 15일을 기준으로 대표 월건을 가져옵니다.
+  // 대부분의 만세력 앱에서 해당 월의 절기 이후 월건을 대표로 표시하는 관례를 따릅니다.
+  const solar = Solar.fromYmd(year, month, 15);
   const lunar = solar.getLunar();
   const eightChar = lunar.getEightChar();
+  // @ts-ignore
+  if (typeof eightChar.setDayGanjiType === 'function') {
+    // @ts-ignore
+    eightChar.setDayGanjiType(1);
+  }
   return parseGanji(eightChar.getMonth());
 }
 
@@ -78,6 +97,11 @@ export function getMonthTransition(year: number, month: number): { day: number, 
         // (오호돈법 등 월건 산출 로직이 정확히 반영되도록 함)
         const nextDaySolar = solar.next(1);
         const nextEightChar = nextDaySolar.getLunar().getEightChar();
+        // @ts-ignore
+        if (typeof nextEightChar.setDayGanjiType === 'function') {
+          // @ts-ignore
+          nextEightChar.setDayGanjiType(1);
+        }
         return {
           day: d,
           term: jieQi,
