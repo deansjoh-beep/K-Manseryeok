@@ -1,6 +1,9 @@
 
-import { Solar, Lunar, SolarTerm } from 'lunar-javascript';
+import { Solar, EightChar } from 'lunar-javascript';
 import { HEAVENLY_STEMS, EARTHLY_BRANCHES, Ganji, Saju } from '../constants';
+
+// 사주 명리학 기준인 23시 자시를 기준으로 날짜가 바뀌도록 설정합니다.
+EightChar.setDayGanjiType(1);
 
 export function getSolarTerm(year: number, month: number, day: number): string | null {
   const solar = Solar.fromYmd(year, month, day);
@@ -40,9 +43,10 @@ export function getFullSaju(year: number, month: number, day: number, hour: numb
   };
 }
 
-export function getYearGanji(year: number): Ganji {
-  // Use the 15th of June to get the representative year Ganji
-  const solar = Solar.fromYmd(year, 6, 15);
+export function getYearGanji(date: Date): Ganji {
+  // 해당 월의 15일을 기준으로 대표 년주를 가져옵니다.
+  // 1월은 전년도 년주가, 2월은 입춘 이후 신년 년주가 주로 표시되도록 합니다.
+  const solar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, 15);
   const lunar = solar.getLunar();
   const eightChar = lunar.getEightChar();
   return parseGanji(eightChar.getYear());
@@ -70,11 +74,14 @@ export function getMonthTransition(year: number, month: number): { day: number, 
       const jieTerms = ['입춘', '경칩', '청명', '입하', '망종', '소서', '입추', '백로', '한로', '입동', '대설', '소한'];
       
       if (jieQi && jieTerms.includes(jieQi)) {
-        const eightChar = lunar.getEightChar();
+        // 절기 시각 이후의 월건을 가져오기 위해 다음 날의 데이터를 사용합니다.
+        // (오호돈법 등 월건 산출 로직이 정확히 반영되도록 함)
+        const nextDaySolar = solar.next(1);
+        const nextEightChar = nextDaySolar.getLunar().getEightChar();
         return {
           day: d,
           term: jieQi,
-          nextGanji: parseGanji(eightChar.getMonth())
+          nextGanji: parseGanji(nextEightChar.getMonth())
         };
       }
     } catch (e) {

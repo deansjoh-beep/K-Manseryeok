@@ -245,8 +245,8 @@ export default function App() {
         <header className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
           <div className="flex items-center gap-2">
             <div className="flex gap-1">
-              <HanjaBox char={getYearGanji(currentDate.getFullYear()).stem} size="lg" className="rounded-r-none border-r-0" />
-              <HanjaBox char={getYearGanji(currentDate.getFullYear()).branch} size="lg" className="rounded-l-none" />
+              <HanjaBox char={getYearGanji(currentDate).stem} size="lg" className="rounded-r-none border-r-0" />
+              <HanjaBox char={getYearGanji(currentDate).branch} size="lg" className="rounded-l-none" />
             </div>
           </div>
 
@@ -794,6 +794,11 @@ export default function App() {
 ## 3. 만세력 산출 로직 (Saju Logic)
 
 사주(四柱)의 네 기둥인 년, 월, 일, 시주를 계산하는 핵심 로직은 다음과 같습니다.
+ 
+ #### 오호돈법 (五虎遁法) 및 오시돈법 (五鼠遁法) 반영
+ *   **월건(月建) 산출**: 년간(年干)을 기준으로 월간(月干)을 정하는 **오호돈법**을 엄격히 준수합니다. (예: 甲/己년의 인월은 丙寅월)
+ *   **시주(時柱) 산출**: 일간(日干)을 기준으로 시간(時干)을 정하는 **오시돈법**을 적용합니다.
+ *   **야자시/조자시**: 본 앱은 현대 명리학의 표준에 따라 **23시(子時)를 기점으로 일진이 바뀌는 방식**을 기본으로 채택하고 있습니다.
 
 ### 년주 (Year Ganji)
 *   단순히 양력 1월 1일이나 음력 1월 1일을 기준으로 하지 않습니다.
