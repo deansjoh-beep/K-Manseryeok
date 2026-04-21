@@ -21,8 +21,6 @@ import {
   Calendar as CalendarIcon, 
   Info, 
   X, 
-  ArrowLeft,
-  Search, 
   StickyNote, 
   Save, 
   Trash2,
@@ -31,6 +29,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
+import { Solar, Lunar } from 'lunar-javascript';
 import { getDayGanji, getLunarDate, getSolarTerm, getFullSaju, isPublicHoliday, getMonthGanji, getYearGanji, getMonthTransition } from './utils/calendar';
 import { Saju, EARTHLY_BRANCHES, HEAVENLY_STEMS, SOLAR_TERMS_HANJA } from './constants';
 import { fetchHolidays, Holiday } from './services/kasiService';
@@ -43,7 +42,7 @@ const ELEMENT_COLORS: Record<string, string> = {
   water: '#5d6d7e', // greyish blue
 };
 
-const HanjaBox = ({ char, size = 'sm', className = "" }: { char: string, size?: 'sm' | 'lg', className?: string }) => {
+const HanjaBox = ({ char, size = 'sm', className = "" }: { char: string, size?: 'xs' | 'sm' | 'lg', className?: string }) => {
   const stem = HEAVENLY_STEMS.find(s => s.hanja === char);
   const branch = EARTHLY_BRANCHES.find(b => b.hanja === char);
   const meta = stem || branch;
@@ -54,18 +53,18 @@ const HanjaBox = ({ char, size = 'sm', className = "" }: { char: string, size?: 
   const isYang = meta.polarity === 'yang';
   const isMetal = meta.element === 'metal';
   
-  const boxSize = size === 'lg' ? 'w-[58px] h-[58px]' : 'w-[29px] h-[29px]';
-  const svgSize = size === 'lg' ? 'w-10 h-10' : 'w-5 h-5';
+  const boxSize = size === 'lg' ? 'w-[58px] h-[58px] rounded-[1.2rem]' : size === 'xs' ? 'w-[22px] h-[22px] rounded-[0.5rem]' : 'w-[29px] h-[29px] rounded-[1.2rem]';
+  const svgSize = size === 'lg' ? 'w-10 h-10' : size === 'xs' ? 'w-4 h-4' : 'w-5 h-5';
 
   // Yin/Yang stroke weights: Yang is thick, Yin is thin
   const fontWeight = isYang ? '700' : '200';
   const strokeWidth = isYang ? '2' : '0.5';
   const textColor = isMetal ? '#5d6d7e' : 'white';
-  const borderColor = isMetal ? 'border-sky-200' : 'border-black/5';
+  const borderColor = size === 'xs' ? 'border-none' : (isMetal ? 'border-sky-200 shadow-sm' : 'border-black/5 shadow-sm');
 
   return (
     <div 
-      className={`${boxSize} flex items-center justify-center rounded-[1.2rem] shadow-sm border ${borderColor} ${className}`}
+      className={`${boxSize} flex items-center justify-center border ${borderColor} ${className}`}
       style={{ backgroundColor: bgColor }}
     >
       <svg viewBox="0 0 100 100" className={svgSize}>
@@ -104,14 +103,30 @@ export default function App() {
   });
   const [currentMemo, setCurrentMemo] = useState('');
 
-  // Ganji Search state
-  const [searchStem, setSearchStem] = useState('甲');
-  const [searchBranch, setSearchBranch] = useState('子');
-  const [searchResults, setSearchResults] = useState<Date[]>([]);
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchDate, setSearchDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [searchDateGanji, setSearchDateGanji] = useState<any>(null);
-  const [preSearchDate, setPreSearchDate] = useState<Date | null>(null);
+  const yearStripRef = React.useRef<HTMLDivElement>(null);
+
+  const cycleYears = React.useMemo(() => {
+    const centralYear = 2026;
+    const startYear = centralYear - 60; // 1966
+    return Array.from({ length: 120 }, (_, i) => {
+      const year = startYear + i;
+      // June 15th for stable year Ganji
+      return {
+        year,
+        ganji: getYearGanji(new Date(year, 5, 15))
+      };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (yearStripRef.current) {
+      const currentYear = currentDate.getFullYear();
+      const yearElement = yearStripRef.current.querySelector(`[data-year="${currentYear}"]`);
+      if (yearElement) {
+        yearElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+    }
+  }, [currentDate.getFullYear()]);
 
   // KASI Holidays state
   const [apiHolidays, setApiHolidays] = useState<Holiday[]>([]);
@@ -188,68 +203,76 @@ export default function App() {
     }
   };
 
-  const searchGanji = () => {
-    const results: Date[] = [];
-    const year = currentDate.getFullYear();
-    // Search within the current year
-    for (let m = 0; m < 12; m++) {
-      const daysInMonth = endOfMonth(new Date(year, m, 1)).getDate();
-      for (let d = 1; d <= daysInMonth; d++) {
-        const date = new Date(year, m, d);
-        const ganji = getDayGanji(year, m + 1, d);
-        if (ganji.stem === searchStem && ganji.branch === searchBranch) {
-          results.push(date);
-        }
-      }
-    }
-    setSearchResults(results);
-  };
-
-  const deriveGanjiFromDate = () => {
-    const date = new Date(searchDate);
-    if (!isNaN(date.getTime())) {
-      const ganji = getDayGanji(date.getFullYear(), date.getMonth() + 1, date.getDate());
-      setSearchDateGanji(ganji);
-    }
-  };
-
-  const toggleSearch = () => {
-    if (!showSearch) {
-      setPreSearchDate(currentDate);
-    }
-    setShowSearch(!showSearch);
-  };
-
-  const goBackToPreSearch = () => {
-    if (preSearchDate) {
-      setCurrentDate(preSearchDate);
-      setPreSearchDate(null);
-      setShowSearch(false);
-    }
-  };
-
   useEffect(() => {
     if (selectedDate) {
       const saju = getFullSaju(selectedDate.getFullYear(), selectedDate.getMonth() + 1, selectedDate.getDate(), selectedHour);
       setSajuData(saju);
     }
-  }, [selectedHour]);
+  }, [selectedHour, selectedDate]);
 
-  const years = Array.from({ length: 101 }, (_, i) => 1950 + i);
+  const years = Array.from({ length: 141 }, (_, i) => 1920 + i);
   const months = Array.from({ length: 12 }, (_, i) => i);
+  const [isLunar, setIsLunar] = useState(false);
+
+  const daysInMonth = React.useMemo(() => {
+    if (isLunar) {
+      // For lunar, we check the length of that specific lunar month
+      const solar = Solar.fromYmd(currentDate.getFullYear(), currentDate.getMonth() + 1, currentDate.getDate());
+      const lunar = solar.getLunar();
+      const monthDays = Lunar.fromYm(lunar.getYear(), lunar.getMonth()).getDayCount();
+      return Array.from({ length: monthDays }, (_, i) => i + 1);
+    }
+    const days = endOfMonth(currentDate).getDate();
+    return Array.from({ length: days }, (_, i) => i + 1);
+  }, [currentDate, isLunar]);
+
+  const handleYearChange = (year: number) => {
+    if (isLunar) {
+      const solar = Solar.fromYmd(currentDate.getFullYear(), currentDate.getMonth() + 1, currentDate.getDate());
+      const lunar = solar.getLunar();
+      const newLunar = Lunar.fromYmd(year, lunar.getMonth(), Math.min(lunar.getDay(), 29));
+      const newSolar = newLunar.getSolar();
+      setCurrentDate(new Date(newSolar.getYear(), newSolar.getMonth() - 1, newSolar.getDay()));
+    } else {
+      setCurrentDate(setYear(currentDate, year));
+    }
+  };
+
+  const handleMonthChange = (month: number) => {
+    if (isLunar) {
+      const solar = Solar.fromYmd(currentDate.getFullYear(), currentDate.getMonth() + 1, currentDate.getDate());
+      const lunar = solar.getLunar();
+      const newLunar = Lunar.fromYmd(lunar.getYear(), month + 1, Math.min(lunar.getDay(), 29));
+      const newSolar = newLunar.getSolar();
+      setCurrentDate(new Date(newSolar.getYear(), newSolar.getMonth() - 1, newSolar.getDay()));
+    } else {
+      setCurrentDate(setMonth(currentDate, month));
+    }
+  };
+
+  const handleDayChange = (day: number) => {
+    if (isLunar) {
+      const solar = Solar.fromYmd(currentDate.getFullYear(), currentDate.getMonth() + 1, currentDate.getDate());
+      const lunar = solar.getLunar();
+      const newLunar = Lunar.fromYmd(lunar.getYear(), lunar.getMonth(), day);
+      const newSolar = newLunar.getSolar();
+      setCurrentDate(new Date(newSolar.getYear(), newSolar.getMonth() - 1, newSolar.getDay()));
+    } else {
+      const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+      setCurrentDate(newDate);
+    }
+  };
+
+  const currentLunar = React.useMemo(() => {
+    const solar = Solar.fromYmd(currentDate.getFullYear(), currentDate.getMonth() + 1, currentDate.getDate());
+    return solar.getLunar();
+  }, [currentDate]);
 
   return (
     <div className={`min-h-screen transition-colors duration-300 font-sans p-4 md:p-8 ${darkMode ? 'bg-stone-950 text-stone-200' : 'bg-stone-50 text-stone-900'}`}>
       <div className="max-w-5xl mx-auto">
-        {/* Header */}
-        <header className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4">
-          <div className="flex items-center gap-2">
-            <div className="flex gap-1">
-              <HanjaBox char={getYearGanji(currentDate).stem} size="lg" className="rounded-r-none border-r-0" />
-              <HanjaBox char={getYearGanji(currentDate).branch} size="lg" className="rounded-l-none" />
-            </div>
-          </div>
-
+        {/* Header (Now at the top) */}
+        <header className="flex flex-col md:flex-row items-center justify-end mb-8 gap-4">
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setDarkMode(!darkMode)}
@@ -265,32 +288,51 @@ export default function App() {
             >
               <Info className="w-5 h-5" />
             </button>
-            <button 
-              onClick={toggleSearch}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl shadow-sm border text-sm font-bold transition-colors ${showSearch ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-stone-900 border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800'}`}
-            >
-              <Search className="w-4 h-4" />
-              {showSearch ? '검색 닫기' : '검색하기'}
-            </button>
             
-            <div className="flex items-center gap-4 bg-white dark:bg-stone-900 p-2 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800">
+            <div className="flex flex-wrap items-center gap-2 bg-white dark:bg-stone-900 p-2 rounded-xl shadow-sm border border-stone-200 dark:border-stone-800">
+              <div className="flex items-center gap-1 bg-stone-100 dark:bg-stone-800 p-1 rounded-lg mr-2">
+                <button 
+                  onClick={() => setIsLunar(false)}
+                  className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${!isLunar ? 'bg-white dark:bg-stone-700 text-emerald-600 shadow-sm' : 'text-stone-400'}`}
+                >
+                  양력
+                </button>
+                <button 
+                  onClick={() => setIsLunar(true)}
+                  className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${isLunar ? 'bg-white dark:bg-stone-700 text-emerald-600 shadow-sm' : 'text-stone-400'}`}
+                >
+                  음력
+                </button>
+              </div>
+
               <select 
-                value={currentDate.getFullYear()} 
-                onChange={(e) => setCurrentDate(setYear(currentDate, parseInt(e.target.value)))}
-                className="bg-transparent font-medium focus:outline-none cursor-pointer px-2 dark:text-white"
+                value={isLunar ? currentLunar.getYear() : currentDate.getFullYear()} 
+                onChange={(e) => handleYearChange(parseInt(e.target.value))}
+                className="bg-transparent font-medium focus:outline-none cursor-pointer px-1 dark:text-white text-sm"
               >
                 {years.map(y => <option key={y} value={y} className="dark:bg-stone-900">{y}년</option>)}
               </select>
               <select 
-                value={currentDate.getMonth()} 
-                onChange={(e) => setCurrentDate(setMonth(currentDate, parseInt(e.target.value)))}
-                className="bg-transparent font-medium focus:outline-none cursor-pointer px-2 dark:text-white"
+                value={isLunar ? Math.abs(currentLunar.getMonth()) - 1 : currentDate.getMonth()} 
+                onChange={(e) => handleMonthChange(parseInt(e.target.value))}
+                className="bg-transparent font-medium focus:outline-none cursor-pointer px-1 dark:text-white text-sm"
               >
-                {months.map(m => <option key={m} value={m} className="dark:bg-stone-900">{m + 1}월</option>)}
+                {months.map(m => <option key={m} value={m} className="dark:bg-stone-900">{m + 1}월{isLunar && currentLunar.getMonth() < 0 && m + 1 === Math.abs(currentLunar.getMonth()) ? '(윤)' : ''}</option>)}
               </select>
+              <select 
+                value={isLunar ? currentLunar.getDay() : currentDate.getDate()} 
+                onChange={(e) => handleDayChange(parseInt(e.target.value))}
+                className="bg-transparent font-medium focus:outline-none cursor-pointer px-1 dark:text-white text-sm"
+              >
+                {daysInMonth.map(d => <option key={d} value={d} className="dark:bg-stone-900">{d}일</option>)}
+              </select>
+
               <div className="flex gap-1 border-l border-stone-200 dark:border-stone-800 pl-2">
                 <button 
-                  onClick={() => setCurrentDate(new Date())}
+                  onClick={() => {
+                    setCurrentDate(new Date());
+                    setIsLunar(false);
+                  }}
                   className="px-2 py-1 text-xs font-bold text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded-md transition-colors mr-1"
                 >
                   오늘
@@ -306,213 +348,111 @@ export default function App() {
           </div>
         </header>
 
-        {/* Ganji Search Panel */}
-        <AnimatePresence>
-          {showSearch && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="mb-8 bg-white dark:bg-stone-900 rounded-2xl shadow-lg border border-stone-200 dark:border-stone-800 overflow-hidden"
-            >
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-lg font-bold text-stone-800 dark:text-white">검색 및 도출</h2>
-                  {preSearchDate && (
-                    <button 
-                      onClick={goBackToPreSearch}
-                      className="flex items-center gap-2 text-emerald-600 hover:text-emerald-700 font-bold text-sm transition-colors"
+        {/* Year Cycle Bar */}
+        <div className="mb-8 bg-white dark:bg-stone-900 rounded-3xl shadow-xl border border-stone-200 dark:border-stone-800 overflow-hidden">
+          <div className="bg-black border-b border-stone-800 py-2 flex items-center justify-center">
+            <span className="text-2xl font-bold text-white flex items-center gap-2">
+              120年 干支 一覽 (1966 - 2085)
+            </span>
+          </div>
+          <div className="overflow-x-auto scrollbar-hide py-6 px-2" ref={yearStripRef}>
+            <div className="flex flex-col gap-4 min-w-max px-4">
+              {[0, 1, 2, 3].map((rowIndex) => (
+                <div key={rowIndex} className="flex gap-2 whitespace-nowrap">
+                  {cycleYears.slice(rowIndex * 30, (rowIndex + 1) * 30).map(({ year, ganji }) => {
+                    const isCurrent = year === currentDate.getFullYear();
+                    return (
+                      <button
+                        key={year}
+                        data-year={year}
+                        onClick={() => {
+                      setCurrentDate(setYear(currentDate, year));
+                      setIsMonthGanjiExpanded(true);
+                    }}
+                        className={`group flex flex-col items-center p-2 rounded-2xl transition-all duration-300 border ${
+                          isCurrent 
+                            ? 'bg-emerald-500 border-emerald-400 shadow-lg shadow-emerald-500/20 scale-110 z-10' 
+                            : 'border-transparent hover:bg-stone-100 dark:hover:bg-stone-800/50 hover:scale-105'
+                        }`}
+                      >
+                        <span className={`text-[10px] font-bold mb-1 tracking-tight transition-colors ${
+                          isCurrent ? 'text-white' : 'text-stone-400 group-hover:text-stone-600 dark:group-hover:text-stone-300'
+                        }`}>
+                          {year}
+                        </span>
+                        <div className="flex flex-col gap-0.5">
+                          <HanjaBox char={ganji.stem} size="xs" className={`${isCurrent ? 'bg-white/20' : ''}`} />
+                          <HanjaBox char={ganji.branch} size="xs" className={`${isCurrent ? 'bg-white/20' : ''}`} />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Month Ganji Table (Integrated, No Accordion) */}
+        <div className="mb-8 bg-white dark:bg-stone-900 rounded-3xl shadow-xl border border-stone-200 dark:border-stone-800 p-2 overflow-hidden">
+          <div className="overflow-x-auto">
+            <div className="min-w-[800px] rounded-2xl overflow-hidden">
+              <div className="grid grid-cols-12 bg-black border-b border-stone-800">
+                {Array.from({ length: 12 }).map((_, i) => {
+                  const isSelected = currentDate.getMonth() === i;
+                  return (
+                    <div 
+                      key={`month-label-${i}`} 
+                      className={`py-2 text-center text-2xl font-bold border-r border-stone-800 last:border-r-0 transition-colors duration-300 ${isSelected ? 'text-emerald-400 bg-stone-900' : 'text-white'}`}
                     >
-                      <ArrowLeft className="w-4 h-4" />
-                      검색 이전으로 돌아가기
-                    </button>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Ganji to Date Search */}
-                  <div>
-                    <h3 className="text-sm font-bold text-stone-800 dark:text-white mb-4 flex items-center gap-2">
-                      <Search className="w-4 h-4 text-emerald-600" />
-                      {currentDate.getFullYear()}년 일진(日辰)으로 날짜 찾기
-                    </h3>
-                    <div className="flex flex-wrap items-end gap-4">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">천간</label>
-                        <select 
-                          value={searchStem}
-                          onChange={(e) => setSearchStem(e.target.value)}
-                          className="bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
-                        >
-                          {HEAVENLY_STEMS.map(s => <option key={s.hanja} value={s.hanja} className="dark:bg-stone-800">{s.hanja}</option>)}
-                        </select>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">지지</label>
-                        <select 
-                          value={searchBranch}
-                          onChange={(e) => setSearchBranch(e.target.value)}
-                          className="bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
-                        >
-                          {EARTHLY_BRANCHES.map(b => <option key={b.hanja} value={b.hanja} className="dark:bg-stone-800">{b.hanja}</option>)}
-                        </select>
-                      </div>
-                      <button 
-                        onClick={searchGanji}
-                        className="bg-emerald-600 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-emerald-700 transition-colors"
-                      >
-                        검색
-                      </button>
+                      {i + 1}월
                     </div>
-
-                    {searchResults.length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-stone-100 dark:border-stone-800">
-                        <p className="text-xs font-bold text-stone-500 mb-2">검색 결과: {searchResults.length}건</p>
-                        <div className="flex flex-wrap gap-2">
-                          {searchResults.map((date, idx) => (
-                            <button 
-                              key={idx}
-                              onClick={() => {
-                                setCurrentDate(date);
-                                handleDateClick(date);
-                              }}
-                              className="bg-stone-100 dark:bg-stone-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-stone-700 dark:text-stone-300 hover:text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                            >
-                              {format(date, 'yyyy년 MM월 dd일')}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Date to Ganji Derivation */}
-                  <div className="border-l border-stone-100 dark:border-stone-800 pl-0 md:pl-8">
-                    <h3 className="text-sm font-bold text-stone-800 dark:text-white mb-4 flex items-center gap-2">
-                      <CalendarIcon className="w-4 h-4 text-emerald-600" />
-                      날짜로 일진(日辰) 도출하기
-                    </h3>
-                    <div className="flex flex-wrap items-end gap-4">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">날짜 선택</label>
-                        <input 
-                          type="date"
-                          value={searchDate}
-                          onChange={(e) => setSearchDate(e.target.value)}
-                          className="bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:text-white"
-                        />
-                      </div>
-                      <button 
-                        onClick={deriveGanjiFromDate}
-                        className="bg-emerald-600 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-emerald-700 transition-colors"
-                      >
-                        도출하기
-                      </button>
-                    </div>
-
-                    {searchDateGanji && (
-                      <div className="mt-4 pt-4 border-t border-stone-100 dark:border-stone-800">
-                        <div className="flex items-center gap-4">
-                          <div className="flex">
-                            <HanjaBox char={searchDateGanji.stem} className="rounded-r-none border-r-0 w-12 h-12 text-xl" />
-                            <HanjaBox char={searchDateGanji.branch} className="rounded-l-none w-12 h-12 text-xl" />
-                          </div>
-                          <div>
-                            <p className="text-lg font-bold text-stone-800 dark:text-white">
-                              {searchDateGanji.stemHangul}{searchDateGanji.branchHangul} ({searchDateGanji.stem}{searchDateGanji.branch})
-                            </p>
-                            <button 
-                              onClick={() => {
-                                const date = new Date(searchDate);
-                                setCurrentDate(date);
-                                handleDateClick(date);
-                              }}
-                              className="text-xs text-emerald-600 font-bold hover:underline mt-1"
-                            >
-                              달력에서 보기
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                  );
+                })}
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Month Ganji Table */}
-        <div className="mb-8 bg-white dark:bg-stone-900 rounded-3xl shadow-xl border border-stone-200 dark:border-stone-800 p-6">
-          <button 
-            onClick={() => setIsMonthGanjiExpanded(!isMonthGanjiExpanded)}
-            className="w-full flex items-center justify-between text-xl font-bold text-stone-800 dark:text-white group"
-          >
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5 text-emerald-600" />
-              {currentDate.getFullYear()}년 월별 간지
-            </div>
-            <div className="p-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors">
-              {isMonthGanjiExpanded ? <ChevronUp className="w-6 h-6 text-stone-400" /> : <ChevronDown className="w-6 h-6 text-stone-400" />}
-            </div>
-          </button>
-
-          <AnimatePresence>
-            {isMonthGanjiExpanded && (
-              <motion.div 
-                initial={{ height: 0, opacity: 0, marginTop: 0 }}
-                animate={{ height: 'auto', opacity: 1, marginTop: 16 }}
-                exit={{ height: 0, opacity: 0, marginTop: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="overflow-x-auto">
-                  <div className="min-w-[800px] border border-stone-200 dark:border-stone-800 rounded-xl overflow-hidden">
-                    <div className="grid grid-cols-12 bg-black border-b border-stone-800">
-                      {Array.from({ length: 12 }).map((_, i) => (
-                        <div key={`month-label-${i}`} className="py-2 text-center text-2xl font-bold text-white border-r border-stone-800 last:border-r-0">
-                          {i + 1}월
+              <div className="grid grid-cols-12 bg-white dark:bg-stone-900">
+                {Array.from({ length: 12 }).map((_, i) => {
+                  const monthIndex = i;
+                  const ganji = getMonthGanji(currentDate.getFullYear(), monthIndex + 1);
+                  const transition = getMonthTransition(currentDate.getFullYear(), monthIndex + 1);
+                  const isSelectedMonth = currentDate.getMonth() === monthIndex;
+                  const isTodayMonth = new Date().getFullYear() === currentDate.getFullYear() && new Date().getMonth() === monthIndex;
+                  return (
+                    <button 
+                      key={`month-ganji-${i}`} 
+                      onClick={() => setCurrentDate(setMonth(currentDate, monthIndex))}
+                      className={`p-3 flex flex-col items-center justify-center gap-2 border-r border-stone-200 dark:border-stone-800 last:border-r-0 transition-all duration-300 hover:bg-stone-50 dark:hover:bg-stone-800/50 ${isSelectedMonth ? 'bg-emerald-500 border-b-emerald-400 shadow-[inset_0_-2px_10_rgba(0,0,0,0.1)]' : ''} ${isTodayMonth && !isSelectedMonth ? 'ring-2 ring-emerald-500 ring-inset' : ''}`}
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="flex">
+                          <HanjaBox char={ganji.stem} className={`rounded-r-none border-r-0 scale-90 ${isSelectedMonth ? 'bg-white/20 border-white/10' : ''}`} />
+                          <HanjaBox char={ganji.branch} className={`rounded-l-none scale-90 ${isSelectedMonth ? 'bg-white/20 border-white/10' : ''}`} />
                         </div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-12 bg-white dark:bg-stone-900">
-                      {Array.from({ length: 12 }).map((_, i) => {
-                        const month = i + 1;
-                        const ganji = getMonthGanji(currentDate.getFullYear(), month);
-                        const transition = getMonthTransition(currentDate.getFullYear(), month);
-                        const isTodayMonth = new Date().getFullYear() === currentDate.getFullYear() && new Date().getMonth() === i;
-                        return (
-                          <div 
-                            key={`month-ganji-${i}`} 
-                            className={`p-3 flex flex-col items-center justify-center gap-2 border-r border-stone-200 dark:border-stone-800 last:border-r-0 ${isTodayMonth ? 'ring-2 ring-emerald-500 ring-inset bg-emerald-50/30 dark:bg-emerald-900/10' : ''}`}
-                          >
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="flex">
-                                <HanjaBox char={ganji.stem} className="rounded-r-none border-r-0 scale-90" />
-                                <HanjaBox char={ganji.branch} className="rounded-l-none scale-90" />
-                              </div>
-                              <span className="text-[9px] font-bold text-stone-400">초순</span>
-                            </div>
-                            
-                            {transition && (
-                              <div className="flex flex-col items-center gap-1 mt-1 pt-1 border-t border-stone-100 dark:border-stone-800 w-full">
-                                <div className="flex items-center gap-1 text-[8px] font-bold text-emerald-600 mb-1">
-                                  <span>{transition.day}일 ({transition.term})</span>
-                                  <ChevronDown className="w-2 h-2" />
-                                </div>
-                                <div className="flex">
-                                  <HanjaBox char={transition.nextGanji.stem} className="rounded-r-none border-r-0 scale-75" />
-                                  <HanjaBox char={transition.nextGanji.branch} className="rounded-l-none scale-75" />
-                                </div>
-                              </div>
-                            )}
+                        <span className={`text-[9px] font-bold transition-colors ${isSelectedMonth ? 'text-emerald-100' : 'text-stone-400'}`}>초순</span>
+                      </div>
+                      
+                      {transition && (
+                        <div className={`flex flex-col items-center gap-1 mt-1 pt-1 border-t w-full ${isSelectedMonth ? 'border-white/10 text-white' : 'border-stone-100 dark:border-stone-800'}`}>
+                          <div className={`flex items-center gap-1 text-[8px] font-bold mb-1 ${isSelectedMonth ? 'text-white' : 'text-emerald-600'}`}>
+                            <span>{transition.day}일 ({transition.term})</span>
+                            <ChevronDown className="w-2 h-2" />
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                          <div className="flex">
+                            <HanjaBox char={transition.nextGanji.stem} className={`rounded-r-none border-r-0 scale-75 ${isSelectedMonth ? 'bg-white/20 border-white/10' : ''}`} />
+                            <HanjaBox char={transition.nextGanji.branch} className={`rounded-l-none scale-75 ${isSelectedMonth ? 'bg-white/20 border-white/10' : ''}`} />
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <div className="p-3 bg-stone-50/50 dark:bg-stone-950/30 border-t border-stone-100 dark:border-stone-800 text-[10px] text-stone-500 flex flex-col gap-1 leading-relaxed">
+            <p>※ 월별 간지는 절기(입춘, 소한 등)를 기준으로 구분됩니다.</p>
+            <p>※ 만세력의 12월(축월, 丑月)은 보통 양력 1월 초순(소한)부터 2월 초순(입춘) 전까지를 의미하며, 위 표의 1월 항목에 주로 해당합니다.</p>
+          </div>
         </div>
 
         {/* Calendar Grid */}
@@ -520,7 +460,7 @@ export default function App() {
           {/* Weekdays */}
           <div className="grid grid-cols-7 bg-black border-b border-stone-800">
             {['일', '월', '화', '수', '목', '금', '토'].map((day, i) => (
-              <div key={day} className={`py-3 text-center text-2xl font-bold uppercase tracking-wider ${i === 0 ? 'text-red-300' : i === 6 ? 'text-blue-300' : 'text-white'}`}>
+              <div key={day} className={`py-2 text-center text-2xl font-bold uppercase tracking-wider ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-white'}`}>
                 {day}
               </div>
             ))}
